@@ -33,10 +33,7 @@ def auth_headers(token: str) -> dict[str, str]:
 
 
 def test_ai_chat_endpoint(client: TestClient):
-    token = register_and_login(
-        client,
-        "ai-endpoint@nexora.ai",
-    )
+    token = register_and_login(client, "ai-endpoint@nexora.ai")
 
     conversation_response = client.post(
         "/api/v1/conversations/",
@@ -45,7 +42,6 @@ def test_ai_chat_endpoint(client: TestClient):
     )
 
     assert conversation_response.status_code == 201
-
     conversation_id = conversation_response.json()["id"]
 
     with patch(
@@ -140,6 +136,7 @@ def test_ai_chat_uses_conversation_history(client: TestClient):
                 "content": prompt,
             }
         )
+
         return "I remember that you said your name is NEXORA."
 
     with patch(
@@ -156,7 +153,6 @@ def test_ai_chat_uses_conversation_history(client: TestClient):
         )
 
     assert response.status_code == 200
-
     assert len(captured_messages) == 1
 
     prompt = captured_messages[0]["content"]
@@ -169,4 +165,75 @@ def test_ai_chat_uses_conversation_history(client: TestClient):
 
     assert data["assistant_message"] == (
         "I remember that you said your name is NEXORA."
+    )
+
+
+def test_ai_chat_uses_relevant_knowledge(client: TestClient):
+    token = register_and_login(
+        client,
+        "ai-knowledge@nexora.ai",
+    )
+
+    knowledge_response = client.post(
+        "/api/v1/knowledge/",
+        headers=auth_headers(token),
+        json={
+            "title": "Python Knowledge",
+            "content": (
+                "Python is a high-level programming language "
+                "used for software development and automation."
+            ),
+        },
+    )
+
+    assert knowledge_response.status_code == 201
+
+    conversation_response = client.post(
+        "/api/v1/conversations/",
+        headers=auth_headers(token),
+        json={"title": "Knowledge AI Test"},
+    )
+
+    assert conversation_response.status_code == 201
+
+    conversation_id = conversation_response.json()["id"]
+
+    captured_prompts: list[str] = []
+
+    def fake_generate_response(prompt: str) -> str:
+        captured_prompts.append(prompt)
+
+        return "Python is a high-level programming language."
+
+    with patch(
+        "app.api.v1.ai.OpenAIProvider.generate_response",
+        side_effect=fake_generate_response,
+    ):
+        response = client.post(
+            "/api/v1/ai/chat",
+            headers=auth_headers(token),
+            json={
+                "conversation_id": conversation_id,
+                "message": "Tell me about Python.",
+            },
+        )
+
+    assert response.status_code == 200
+    assert len(captured_prompts) == 1
+
+    prompt = captured_prompts[0]
+
+    assert "Relevant knowledge:" in prompt
+    assert "Title: Python Knowledge" in prompt
+    assert (
+        "Python is a high-level programming language "
+        "used for software development and automation."
+    ) in prompt
+    assert "Conversation:" in prompt
+    assert "user: Tell me about Python." in prompt
+
+    data = response.json()
+
+    assert data["assistant_message"] == (
+        "Python is a high-level programming language."
     )

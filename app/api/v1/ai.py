@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select  # type: ignore[reportMissingImports]
 from sqlalchemy.orm import Session  # type: ignore[reportMissingImports]
 
 from app.ai.openai_provider import OpenAIProvider
+from app.ai.retrieval import KnowledgeRetrievalService
 from app.ai.service import AIService
 from app.auth.dependencies import get_current_user
 from app.db.database import get_db
@@ -25,6 +26,18 @@ class AIChatResponse(BaseModel):
     conversation_id: int
     user_message: str
     assistant_message: str
+
+
+def build_knowledge_context(documents) -> str:
+    """Build a readable knowledge context for the AI provider."""
+
+    return "\n\n".join(
+        (
+            f"Title: {document.title}\n"
+            f"Content: {document.content}"
+        )
+        for document in documents
+    )
 
 
 @router.post(
@@ -75,12 +88,25 @@ def chat(
     ]
 
     try:
+        retrieval_service = KnowledgeRetrievalService(db)
+
+        relevant_documents = retrieval_service.search(
+            user=current_user,
+            query=chat_data.message,
+            limit=5,
+        )
+
+        knowledge_context = build_knowledge_context(
+            relevant_documents,
+        )
+
         service = AIService(
             provider=OpenAIProvider(),
         )
 
         assistant_response = service.generate_conversation_response(
             conversation_messages,
+            knowledge_context=knowledge_context or None,
         )
     except Exception as exc:
         db.rollback()

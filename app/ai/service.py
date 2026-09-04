@@ -15,14 +15,23 @@ class AIService:
     def generate_conversation_response(
         self,
         messages: Sequence[dict[str, str]],
+        knowledge_context: str | None = None,
     ) -> str:
-        """Generate an AI response using conversation history as context."""
+        """Generate an AI response using conversation and knowledge context."""
 
         conversation_text = "\n".join(
             f"{message['role']}: {message['content']}"
             for message in messages
         )
 
-        return self.provider.generate_response(
-            conversation_text,
-        )
+        if knowledge_context:
+            prompt = (
+                "Relevant knowledge:\n"
+                f"{knowledge_context}\n\n"
+                "Conversation:\n"
+                f"{conversation_text}"
+            )
+        else:
+            prompt = conversation_text
+
+        return self.provider.generate_response(prompt)
