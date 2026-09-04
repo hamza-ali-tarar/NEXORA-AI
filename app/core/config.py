@@ -12,6 +12,9 @@ except (ImportError, AttributeError):
         return kwargs
 
 
+from pydantic import model_validator
+
+
 class Settings(BaseSettings):
     APP_NAME: str = "NEXORA AI"
     APP_VERSION: str = "0.1.0"
@@ -27,6 +30,18 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
 
     SECRET_KEY: str = "dev-secret-key-change-in-production"
+
+    @model_validator(mode="after")
+    def validate_production_security(self):
+        if self.ENVIRONMENT.lower() == "production":
+            if self.SECRET_KEY == "dev-secret-key-change-in-production":
+                raise ValueError(
+                    "A secure SECRET_KEY is required in production."
+                )
+
+            self.DEBUG = False
+
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env",

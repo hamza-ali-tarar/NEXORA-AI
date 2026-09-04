@@ -1,3 +1,5 @@
+from pydantic import ValidationError
+
 from app.core.config import Settings
 
 
@@ -28,3 +30,24 @@ def test_settings_reads_environment_variables(monkeypatch):
     assert settings.DEBUG is False
     assert settings.SECRET_KEY == "test-secret-key"
     assert settings.OPENAI_API_KEY == "test-api-key"
+
+
+def test_production_requires_secure_secret_key(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("SECRET_KEY", "dev-secret-key-change-in-production")
+
+    try:
+        Settings(_env_file=None)
+        assert False, "Expected production SECRET_KEY validation to fail."
+    except ValidationError as exc:
+        assert "SECRET_KEY" in str(exc)
+
+
+def test_production_disables_debug(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("SECRET_KEY", "a-secure-production-secret-key")
+    monkeypatch.setenv("DEBUG", "true")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.DEBUG is False
