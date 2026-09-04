@@ -1,4 +1,15 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+try:
+    from importlib import import_module
+
+    _pydantic_settings = import_module("pydantic_settings")
+    BaseSettings = _pydantic_settings.BaseSettings
+    SettingsConfigDict = _pydantic_settings.SettingsConfigDict
+except (ImportError, AttributeError):
+    # Support environments that still provide settings through Pydantic v1.
+    from pydantic import BaseSettings
+
+    def SettingsConfigDict(**kwargs: object) -> dict[str, object]:
+        return kwargs
 
 
 class Settings(BaseSettings):
@@ -12,6 +23,8 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     DATABASE_URL: str = "sqlite:///./nexora.db"
+
+    OPENAI_API_KEY: str | None = None
 
     SECRET_KEY: str = "dev-secret-key-change-in-production"
 
