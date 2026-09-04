@@ -1,7 +1,7 @@
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy import create_engine  # type: ignore[reportMissingImports]
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker  # type: ignore[reportMissingImports]
 
 from app.core.config import settings
 

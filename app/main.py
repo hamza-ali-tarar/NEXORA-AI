@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.api.v1.auth import router as auth_me_router
+from app.api.v1.conversations import router as conversations_router
 from app.api.v1.health import router as health_router
 from app.api.v1.knowledge import router as knowledge_router
 from app.api.v1.users import router as users_router
@@ -37,6 +38,11 @@ app.include_router(
 
 app.include_router(
     knowledge_router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    conversations_router,
     prefix="/api/v1",
 )
 
