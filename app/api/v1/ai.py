@@ -3,11 +3,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select  # type: ignore[reportMissingImports]
 from sqlalchemy.orm import Session  # type: ignore[reportMissingImports]
 
+from app.ai.dependencies import get_ai_provider
 from app.ai.exceptions import (
     AIProviderConfigurationError,
     AIProviderRequestError,
 )
-from app.ai.openai_provider import OpenAIProvider
+from app.ai.provider import AIProvider
 from app.ai.retrieval import KnowledgeRetrievalService
 from app.ai.service import AIService
 from app.auth.dependencies import get_current_user
@@ -52,6 +53,7 @@ def chat(
     chat_data: AIChatRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    provider: AIProvider = Depends(get_ai_provider),
 ):
     conversation = db.scalar(
         select(Conversation).where(
@@ -105,7 +107,7 @@ def chat(
         )
 
         service = AIService(
-            provider=OpenAIProvider(),
+            provider=provider,
         )
 
         assistant_response = service.generate_conversation_response(

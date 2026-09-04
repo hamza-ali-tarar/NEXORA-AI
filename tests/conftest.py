@@ -4,8 +4,8 @@ from sqlalchemy import create_engine  # pyright: ignore[reportMissingImports]
 from sqlalchemy.orm import sessionmaker  # pyright: ignore[reportMissingImports]
 from sqlalchemy.pool import StaticPool  # pyright: ignore[reportMissingImports]
 
-from app.db.database import get_db
 from app.db.database import Base
+from app.db.database import get_db
 from app.main import app
 
 
@@ -41,20 +41,22 @@ def db():
 
 @pytest.fixture
 def client():
+    Base.metadata.drop_all(bind=test_engine)
     Base.metadata.create_all(bind=test_engine)
 
     def override_get_db():
-        db = TestingSessionLocal()
+        db_session = TestingSessionLocal()
 
         try:
-            yield db
+            yield db_session
         finally:
-            db.close()
+            db_session.close()
 
     app.dependency_overrides[get_db] = override_get_db
 
-    with TestClient(app) as test_client:
-        yield test_client
-
-    app.dependency_overrides.clear()
-    Base.metadata.drop_all(bind=test_engine)
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=test_engine)

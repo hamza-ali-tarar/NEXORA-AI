@@ -1,11 +1,14 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 
+from app.ai.dependencies import get_ai_provider
 from app.ai.exceptions import (
     AIProviderConfigurationError,
     AIProviderRequestError,
 )
+from app.ai.provider import AIProvider
+from app.main import app
 
 
 def register_and_login(client: TestClient, email: str) -> str:
@@ -53,6 +56,17 @@ def create_conversation(
     return response.json()["id"]
 
 
+def override_provider(
+    client: TestClient,
+    provider: AIProvider,
+) -> None:
+    app.dependency_overrides[get_ai_provider] = lambda: provider
+
+
+def clear_provider_override(client: TestClient) -> None:
+    app.dependency_overrides.pop(get_ai_provider, None)
+
+
 def test_ai_chat_endpoint(client: TestClient):
     token = register_and_login(client, "ai-endpoint@nexora.ai")
 
@@ -62,10 +76,14 @@ def test_ai_chat_endpoint(client: TestClient):
         "AI Endpoint Test",
     )
 
-    with patch(
-        "app.api.v1.ai.OpenAIProvider.generate_conversation_response",
-        return_value="Mocked AI response",
-    ):
+    provider = Mock(spec=AIProvider)
+    provider.generate_conversation_response.return_value = (
+        "Mocked AI response"
+    )
+
+    override_provider(client, provider)
+
+    try:
         response = client.post(
             "/api/v1/ai/chat",
             headers=auth_headers(token),
@@ -74,6 +92,8 @@ def test_ai_chat_endpoint(client: TestClient):
                 "message": "Hello NEXORA AI",
             },
         )
+    finally:
+        clear_provider_override(client)
 
     assert response.status_code == 200
 
@@ -90,10 +110,14 @@ def test_ai_chat_requires_existing_conversation(client: TestClient):
         "ai-missing-conversation@nexora.ai",
     )
 
-    with patch(
-        "app.api.v1.ai.OpenAIProvider.generate_conversation_response",
-        return_value="Mocked AI response",
-    ):
+    provider = Mock(spec=AIProvider)
+    provider.generate_conversation_response.return_value = (
+        "Mocked AI response"
+    )
+
+    override_provider(client, provider)
+
+    try:
         response = client.post(
             "/api/v1/ai/chat",
             headers=auth_headers(token),
@@ -102,6 +126,8 @@ def test_ai_chat_requires_existing_conversation(client: TestClient):
                 "message": "Hello NEXORA AI",
             },
         )
+    finally:
+        clear_provider_override(client)
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Conversation not found."
@@ -143,6 +169,8 @@ def test_ai_chat_uses_conversation_history(client: TestClient):
 
     captured_messages: list[list[dict[str, str]]] = []
 
+    provider = Mock(spec=AIProvider)
+
     def fake_generate_conversation_response(
         messages: list[dict[str, str]],
     ) -> str:
@@ -150,10 +178,13 @@ def test_ai_chat_uses_conversation_history(client: TestClient):
 
         return "I remember that you said your name is NEXORA."
 
-    with patch(
-        "app.api.v1.ai.OpenAIProvider.generate_conversation_response",
-        side_effect=fake_generate_conversation_response,
-    ):
+    provider.generate_conversation_response.side_effect = (
+        fake_generate_conversation_response
+    )
+
+    override_provider(client, provider)
+
+    try:
         response = client.post(
             "/api/v1/ai/chat",
             headers=auth_headers(token),
@@ -162,6 +193,8 @@ def test_ai_chat_uses_conversation_history(client: TestClient):
                 "message": "Do you remember my name?",
             },
         )
+    finally:
+        clear_provider_override(client)
 
     assert response.status_code == 200
     assert len(captured_messages) == 1
@@ -218,6 +251,8 @@ def test_ai_chat_uses_relevant_knowledge(client: TestClient):
 
     captured_messages: list[list[dict[str, str]]] = []
 
+    provider = Mock(spec=AIProvider)
+
     def fake_generate_conversation_response(
         messages: list[dict[str, str]],
     ) -> str:
@@ -225,10 +260,13 @@ def test_ai_chat_uses_relevant_knowledge(client: TestClient):
 
         return "Python is a high-level programming language."
 
-    with patch(
-        "app.api.v1.ai.OpenAIProvider.generate_conversation_response",
-        side_effect=fake_generate_conversation_response,
-    ):
+    provider.generate_conversation_response.side_effect = (
+        fake_generate_conversation_response
+    )
+
+    override_provider(client, provider)
+
+    try:
         response = client.post(
             "/api/v1/ai/chat",
             headers=auth_headers(token),
@@ -237,6 +275,8 @@ def test_ai_chat_uses_relevant_knowledge(client: TestClient):
                 "message": "Tell me about Python.",
             },
         )
+    finally:
+        clear_provider_override(client)
 
     assert response.status_code == 200
     assert len(captured_messages) == 1
@@ -296,6 +336,8 @@ def test_ai_chat_does_not_use_other_users_knowledge(client: TestClient):
 
     captured_messages: list[list[dict[str, str]]] = []
 
+    provider = Mock(spec=AIProvider)
+
     def fake_generate_conversation_response(
         messages: list[dict[str, str]],
     ) -> str:
@@ -303,10 +345,13 @@ def test_ai_chat_does_not_use_other_users_knowledge(client: TestClient):
 
         return "I do not have that information."
 
-    with patch(
-        "app.api.v1.ai.OpenAIProvider.generate_conversation_response",
-        side_effect=fake_generate_conversation_response,
-    ):
+    provider.generate_conversation_response.side_effect = (
+        fake_generate_conversation_response
+    )
+
+    override_provider(client, provider)
+
+    try:
         response = client.post(
             "/api/v1/ai/chat",
             headers=auth_headers(user_b_token),
@@ -315,6 +360,8 @@ def test_ai_chat_does_not_use_other_users_knowledge(client: TestClient):
                 "message": "Tell me about private secret knowledge.",
             },
         )
+    finally:
+        clear_provider_override(client)
 
     assert response.status_code == 200
     assert len(captured_messages) == 1
@@ -348,12 +395,16 @@ def test_ai_chat_returns_503_for_provider_configuration_error(
         "Configuration Error Test",
     )
 
-    with patch(
-        "app.api.v1.ai.OpenAIProvider",
-        side_effect=AIProviderConfigurationError(
+    provider = Mock(spec=AIProvider)
+    provider.generate_conversation_response.side_effect = (
+        AIProviderConfigurationError(
             "OPENAI_API_KEY is not configured."
-        ),
-    ):
+        )
+    )
+
+    override_provider(client, provider)
+
+    try:
         response = client.post(
             "/api/v1/ai/chat",
             headers=auth_headers(token),
@@ -362,6 +413,8 @@ def test_ai_chat_returns_503_for_provider_configuration_error(
                 "message": "Hello NEXORA AI",
             },
         )
+    finally:
+        clear_provider_override(client)
 
     assert response.status_code == 503
     assert response.json()["detail"] == "AI provider is not configured."
@@ -389,12 +442,16 @@ def test_ai_chat_returns_502_for_provider_request_error(
         "Provider Request Error Test",
     )
 
-    with patch(
-        "app.api.v1.ai.OpenAIProvider.generate_conversation_response",
-        side_effect=AIProviderRequestError(
+    provider = Mock(spec=AIProvider)
+    provider.generate_conversation_response.side_effect = (
+        AIProviderRequestError(
             "OpenAI provider request failed."
-        ),
-    ):
+        )
+    )
+
+    override_provider(client, provider)
+
+    try:
         response = client.post(
             "/api/v1/ai/chat",
             headers=auth_headers(token),
@@ -403,6 +460,8 @@ def test_ai_chat_returns_502_for_provider_request_error(
                 "message": "Hello NEXORA AI",
             },
         )
+    finally:
+        clear_provider_override(client)
 
     assert response.status_code == 502
     assert response.json()["detail"] == "AI provider request failed."
