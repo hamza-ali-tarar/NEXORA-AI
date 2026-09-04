@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite:///./nexora.db"
 
+    AI_PROVIDER: str = "openai"
     OPENAI_API_KEY: str | None = None
 
     SECRET_KEY: str = "dev-secret-key-change-in-production"
