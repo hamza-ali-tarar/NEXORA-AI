@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from app.api.v1.ai import router as ai_router
 from app.api.v1.auth import router as auth_me_router
@@ -15,6 +16,21 @@ app = FastAPI(
     description=settings.APP_DESCRIPTION,
     version=settings.APP_VERSION,
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    """Return a safe response for unexpected server errors."""
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error.",
+        },
+    )
 
 
 app.include_router(
