@@ -91,3 +91,82 @@ def test_ai_chat_requires_existing_conversation(client: TestClient):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Conversation not found."
+
+
+def test_ai_chat_uses_conversation_history(client: TestClient):
+    token = register_and_login(
+        client,
+        "ai-history@nexora.ai",
+    )
+
+    conversation_response = client.post(
+        "/api/v1/conversations/",
+        headers=auth_headers(token),
+        json={"title": "AI History Test"},
+    )
+
+    assert conversation_response.status_code == 201
+
+    conversation_id = conversation_response.json()["id"]
+
+    first_message_response = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/",
+        headers=auth_headers(token),
+        json={
+            "role": "user",
+            "content": "My name is NEXORA.",
+        },
+    )
+
+    assert first_message_response.status_code == 201
+
+    assistant_message_response = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/",
+        headers=auth_headers(token),
+        json={
+            "role": "assistant",
+            "content": "Nice to meet you, NEXORA.",
+        },
+    )
+
+    assert assistant_message_response.status_code == 201
+
+    captured_messages: list[dict[str, str]] = []
+
+    def fake_generate_response(prompt: str) -> str:
+        captured_messages.append(
+            {
+                "role": "context",
+                "content": prompt,
+            }
+        )
+        return "I remember that you said your name is NEXORA."
+
+    with patch(
+        "app.api.v1.ai.OpenAIProvider.generate_response",
+        side_effect=fake_generate_response,
+    ):
+        response = client.post(
+            "/api/v1/ai/chat",
+            headers=auth_headers(token),
+            json={
+                "conversation_id": conversation_id,
+                "message": "Do you remember my name?",
+            },
+        )
+
+    assert response.status_code == 200
+
+    assert len(captured_messages) == 1
+
+    prompt = captured_messages[0]["content"]
+
+    assert "user: My name is NEXORA." in prompt
+    assert "assistant: Nice to meet you, NEXORA." in prompt
+    assert "user: Do you remember my name?" in prompt
+
+    data = response.json()
+
+    assert data["assistant_message"] == (
+        "I remember that you said your name is NEXORA."
+    )

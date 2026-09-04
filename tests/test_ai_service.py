@@ -14,6 +14,7 @@ def test_ai_service_generates_response():
 
     assert response == "Mock response: Hello NEXORA"
 
+
 def test_ai_service_uses_provider():
     class FakeProvider:
         def generate_response(self, prompt: str) -> str:
@@ -24,3 +25,34 @@ def test_ai_service_uses_provider():
     response = service.generate_response("Hello NEXORA")
 
     assert response == "AI: Hello NEXORA"
+
+
+def test_ai_service_generates_conversation_response():
+    class FakeProvider:
+        def generate_response(self, prompt: str) -> str:
+            return f"AI: {prompt}"
+
+    service = AIService(provider=FakeProvider())
+
+    messages = [
+        {
+            "role": "user",
+            "content": "Hello NEXORA",
+        },
+        {
+            "role": "assistant",
+            "content": "Hello! How can I help?",
+        },
+        {
+            "role": "user",
+            "content": "Tell me about Python.",
+        },
+    ]
+
+    response = service.generate_conversation_response(messages)
+
+    assert response == (
+        "AI: user: Hello NEXORA\n"
+        "assistant: Hello! How can I help?\n"
+        "user: Tell me about Python."
+    )

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy import select  # type: ignore[reportMissingImports]
+from sqlalchemy.orm import Session  # type: ignore[reportMissingImports]
 
 from app.ai.openai_provider import OpenAIProvider
 from app.ai.service import AIService
@@ -35,10 +36,12 @@ def chat(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    conversation = db.query(Conversation).filter(
+    conversation = db.scalar(
+        select(Conversation).where(
             Conversation.id == chat_data.conversation_id,
             Conversation.user_id == current_user.id,
-        ).first()
+        )
+    )
 
     if conversation is None:
         raise HTTPException(
@@ -55,13 +58,29 @@ def chat(
     db.add(user_message)
     db.flush()
 
-    service = AIService(
-        provider=OpenAIProvider(),
-    )
+    messages = db.scalars(
+        select(Message)
+        .where(
+            Message.conversation_id == conversation.id,
+        )
+        .order_by(Message.id)
+    ).all()
+
+    conversation_messages = [
+        {
+            "role": message.role,
+            "content": message.content,
+        }
+        for message in messages
+    ]
 
     try:
-        assistant_response = service.generate_response(
-            chat_data.message,
+        service = AIService(
+            provider=OpenAIProvider(),
+        )
+
+        assistant_response = service.generate_conversation_response(
+            conversation_messages,
         )
     except Exception as exc:
         db.rollback()
