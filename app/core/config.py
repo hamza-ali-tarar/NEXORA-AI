@@ -12,6 +12,8 @@ except (ImportError, AttributeError):
         return kwargs
 
 
+from typing import Literal
+
 from pydantic import model_validator
 
 
@@ -27,7 +29,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite:///./nexora.db"
 
-    AI_PROVIDER: str = "openai"
+    AI_PROVIDER: Literal["openai", "mock"] = "openai"
     OPENAI_API_KEY: str | None = None
 
     SECRET_KEY: str = "dev-secret-key-change-in-production"
