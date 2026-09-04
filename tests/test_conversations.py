@@ -192,3 +192,176 @@ def test_delete_other_users_conversation(client: TestClient):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Conversation not found."
+
+def test_create_message(client: TestClient):
+    token = register_and_login(client, "message-create@nexora.ai")
+
+    conversation_response = client.post(
+        "/api/v1/conversations/",
+        headers=auth_headers(token),
+        json={"title": "Message Test"},
+    )
+
+    assert conversation_response.status_code == 201
+
+    conversation_id = conversation_response.json()["id"]
+
+    response = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/",
+        headers=auth_headers(token),
+        json={
+            "role": "user",
+            "content": "Hello NEXORA AI",
+        },
+    )
+
+    assert response.status_code == 201
+
+    data = response.json()
+
+    assert data["conversation_id"] == conversation_id
+    assert data["role"] == "user"
+    assert data["content"] == "Hello NEXORA AI"
+    assert "id" in data
+    assert "created_at" in data
+
+
+def test_list_messages(client: TestClient):
+    token = register_and_login(client, "message-list@nexora.ai")
+
+    conversation_response = client.post(
+        "/api/v1/conversations/",
+        headers=auth_headers(token),
+        json={"title": "Message List Test"},
+    )
+
+    conversation_id = conversation_response.json()["id"]
+
+    client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/",
+        headers=auth_headers(token),
+        json={
+            "role": "user",
+            "content": "First message",
+        },
+    )
+
+    client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/",
+        headers=auth_headers(token),
+        json={
+            "role": "assistant",
+            "content": "Second message",
+        },
+    )
+
+    response = client.get(
+        f"/api/v1/conversations/{conversation_id}/messages/",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert len(data) == 2
+    assert data[0]["content"] == "First message"
+    assert data[1]["content"] == "Second message"
+
+
+def test_message_conversation_ownership_isolation(client: TestClient):
+    user_one_token = register_and_login(
+        client,
+        "message-owner-one@nexora.ai",
+    )
+
+    user_two_token = register_and_login(
+        client,
+        "message-owner-two@nexora.ai",
+    )
+
+    conversation_response = client.post(
+        "/api/v1/conversations/",
+        headers=auth_headers(user_one_token),
+        json={"title": "Private Message Conversation"},
+    )
+
+    conversation_id = conversation_response.json()["id"]
+
+    response = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/",
+        headers=auth_headers(user_two_token),
+        json={
+            "role": "user",
+            "content": "Unauthorized message",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Conversation not found."
+
+
+def test_list_messages_ownership_isolation(client: TestClient):
+    user_one_token = register_and_login(
+        client,
+        "message-list-owner@nexora.ai",
+    )
+
+    user_two_token = register_and_login(
+        client,
+        "message-list-other@nexora.ai",
+    )
+
+    conversation_response = client.post(
+        "/api/v1/conversations/",
+        headers=auth_headers(user_one_token),
+        json={"title": "Private Messages"},
+    )
+
+    conversation_id = conversation_response.json()["id"]
+
+    response = client.get(
+        f"/api/v1/conversations/{conversation_id}/messages/",
+        headers=auth_headers(user_two_token),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Conversation not found."
+def test_message_updates_conversation_timestamp(client: TestClient):
+    token = register_and_login(
+        client,
+        "message-timestamp@nexora.ai",
+    )
+
+    conversation_response = client.post(
+        "/api/v1/conversations/",
+        headers=auth_headers(token),
+        json={"title": "Timestamp Test"},
+    )
+
+    assert conversation_response.status_code == 201
+
+    conversation_id = conversation_response.json()["id"]
+    original_updated_at = conversation_response.json()["updated_at"]
+
+    message_response = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/",
+        headers=auth_headers(token),
+        json={
+            "role": "user",
+            "content": "This should update the conversation timestamp.",
+        },
+    )
+
+    assert message_response.status_code == 201
+
+    conversation_after_message = client.get(
+        f"/api/v1/conversations/{conversation_id}",
+        headers=auth_headers(token),
+    )
+
+    assert conversation_after_message.status_code == 200
+
+    new_updated_at = conversation_after_message.json()["updated_at"]
+
+    assert new_updated_at != original_updated_at

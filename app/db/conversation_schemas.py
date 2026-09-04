@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -18,7 +19,7 @@ class ConversationRead(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    role: str = Field(min_length=1, max_length=50)
+    role: Literal["user", "assistant", "system"]
     content: str = Field(min_length=1)
 
 

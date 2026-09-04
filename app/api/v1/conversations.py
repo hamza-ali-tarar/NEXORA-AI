@@ -1,11 +1,18 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select  # pyright: ignore[reportMissingImports]
-from sqlalchemy.orm import Session  # pyright: ignore[reportMissingImports]
+from sqlalchemy import select  # type: ignore[reportMissingImports]
+from sqlalchemy.orm import Session  # type: ignore[reportMissingImports]
 
 from app.auth.dependencies import get_current_user
-from app.db.conversation_schemas import ConversationCreate, ConversationRead
+from app.db.conversation_schemas import (
+    ConversationCreate,
+    ConversationRead,
+    MessageCreate,
+    MessageRead,
+)
 from app.db.database import get_db
-from app.db.models import Conversation, User
+from app.db.models import Conversation, Message, User
 
 
 router = APIRouter(
@@ -81,6 +88,79 @@ def get_conversation(
         )
 
     return conversation
+
+
+@router.post(
+    "/{conversation_id}/messages/",
+    response_model=MessageRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_message(
+    conversation_id: int,
+    message_data: MessageCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id,
+        )
+    )
+
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found.",
+        )
+
+    message = Message(
+        conversation_id=conversation.id,
+        role=message_data.role,
+        content=message_data.content,
+    )
+
+    db.add(message)
+
+    conversation.updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(message)
+
+    return message
+
+
+@router.get(
+    "/{conversation_id}/messages/",
+    response_model=list[MessageRead],
+)
+def get_messages(
+    conversation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id,
+        )
+    )
+
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found.",
+        )
+
+    query = (
+        select(Message)
+        .where(
+            Message.conversation_id == conversation.id,
+        )
+        .order_by(Message.id)
+    )
+
+    return db.scalars(query).all()
 
 
 @router.delete(
