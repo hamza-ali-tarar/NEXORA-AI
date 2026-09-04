@@ -237,3 +237,73 @@ def test_ai_chat_uses_relevant_knowledge(client: TestClient):
     assert data["assistant_message"] == (
         "Python is a high-level programming language."
     )
+
+
+def test_ai_chat_does_not_use_other_users_knowledge(client: TestClient):
+    user_a_token = register_and_login(
+        client,
+        "ai-security-user-a@nexora.ai",
+    )
+
+    user_b_token = register_and_login(
+        client,
+        "ai-security-user-b@nexora.ai",
+    )
+
+    knowledge_response = client.post(
+        "/api/v1/knowledge/",
+        headers=auth_headers(user_a_token),
+        json={
+            "title": "Private Secret Knowledge",
+            "content": (
+                "This information belongs only to User A "
+                "and must never be exposed to another user."
+            ),
+        },
+    )
+
+    assert knowledge_response.status_code == 201
+
+    conversation_response = client.post(
+        "/api/v1/conversations/",
+        headers=auth_headers(user_b_token),
+        json={"title": "Security Test"},
+    )
+
+    assert conversation_response.status_code == 201
+
+    conversation_id = conversation_response.json()["id"]
+
+    captured_prompts: list[str] = []
+
+    def fake_generate_response(prompt: str) -> str:
+        captured_prompts.append(prompt)
+
+        return "I do not have that information."
+
+    with patch(
+        "app.api.v1.ai.OpenAIProvider.generate_response",
+        side_effect=fake_generate_response,
+    ):
+        response = client.post(
+            "/api/v1/ai/chat",
+            headers=auth_headers(user_b_token),
+            json={
+                "conversation_id": conversation_id,
+                "message": "Tell me about private secret knowledge.",
+            },
+        )
+
+    assert response.status_code == 200
+    assert len(captured_prompts) == 1
+
+    prompt = captured_prompts[0]
+
+    assert "Private Secret Knowledge" not in prompt
+    assert "This information belongs only to User A" not in prompt
+
+    data = response.json()
+
+    assert data["assistant_message"] == (
+        "I do not have that information."
+    )
