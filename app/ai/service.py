@@ -19,19 +19,21 @@ class AIService:
     ) -> str:
         """Generate an AI response using conversation and knowledge context."""
 
-        conversation_text = "\n".join(
-            f"{message['role']}: {message['content']}"
-            for message in messages
-        )
+        conversation_messages = list(messages)
 
         if knowledge_context:
-            prompt = (
-                "Relevant knowledge:\n"
-                f"{knowledge_context}\n\n"
-                "Conversation:\n"
-                f"{conversation_text}"
+            conversation_messages.insert(
+                0,
+                {
+                    "role": "system",
+                    "content": (
+                        "Use the following relevant knowledge when "
+                        "answering the conversation:\n\n"
+                        f"{knowledge_context}"
+                    ),
+                },
             )
-        else:
-            prompt = conversation_text
 
-        return self.provider.generate_response(prompt)
+        return self.provider.generate_conversation_response(
+            conversation_messages,
+        )

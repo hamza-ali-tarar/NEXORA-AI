@@ -1,4 +1,7 @@
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+import pytest  # type: ignore[reportMissingImports]
 
 from app.ai.exceptions import (
     AIProviderConfigurationError,
@@ -12,19 +15,19 @@ def test_openai_provider_requires_api_key():
         "app.ai.openai_provider.settings.OPENAI_API_KEY",
         None,
     ):
-        try:
+        with pytest.raises(AIProviderConfigurationError) as exc_info:
             OpenAIProvider()
-            assert False, "Expected AIProviderConfigurationError was not raised."
-        except AIProviderConfigurationError as exc:
-            assert str(exc) == "OPENAI_API_KEY is not configured."
+
+    assert str(exc_info.value) == "OPENAI_API_KEY is not configured."
 
 
 def test_openai_provider_generates_response():
-    mock_response = MagicMock()
-    mock_response.output_text = "Hello from NEXORA AI"
+    fake_response = SimpleNamespace(
+        output_text="Hello from OpenAI.",
+    )
 
-    mock_client = MagicMock()
-    mock_client.responses.create.return_value = mock_response
+    fake_client = Mock()
+    fake_client.responses.create.return_value = fake_response
 
     with patch(
         "app.ai.openai_provider.settings.OPENAI_API_KEY",
@@ -32,51 +35,27 @@ def test_openai_provider_generates_response():
     ):
         with patch(
             "app.ai.openai_provider.OpenAI",
-            return_value=mock_client,
+            return_value=fake_client,
         ):
             provider = OpenAIProvider()
 
-    response = provider.generate_response(
-        "Hello NEXORA AI",
-    )
+    response = provider.generate_response("Hello NEXORA")
 
-    assert response == "Hello from NEXORA AI"
+    assert response == "Hello from OpenAI."
 
-    mock_client.responses.create.assert_called_once_with(
+    fake_client.responses.create.assert_called_once_with(
         model="gpt-5-mini",
-        input="Hello NEXORA AI",
+        input="Hello NEXORA",
     )
-
-
-def test_openai_provider_generate_response_handles_request_error():
-    mock_client = MagicMock()
-    mock_client.responses.create.side_effect = RuntimeError(
-        "OpenAI request failed"
-    )
-
-    with patch(
-        "app.ai.openai_provider.settings.OPENAI_API_KEY",
-        "test-api-key",
-    ):
-        with patch(
-            "app.ai.openai_provider.OpenAI",
-            return_value=mock_client,
-        ):
-            provider = OpenAIProvider()
-
-    try:
-        provider.generate_response("Hello NEXORA AI")
-        assert False, "Expected AIProviderRequestError was not raised."
-    except AIProviderRequestError as exc:
-        assert str(exc) == "OpenAI provider request failed."
 
 
 def test_openai_provider_generates_conversation_response():
-    mock_response = MagicMock()
-    mock_response.output_text = "Hello from NEXORA AI"
+    fake_response = SimpleNamespace(
+        output_text="Conversation response.",
+    )
 
-    mock_client = MagicMock()
-    mock_client.responses.create.return_value = mock_response
+    fake_client = Mock()
+    fake_client.responses.create.return_value = fake_response
 
     with patch(
         "app.ai.openai_provider.settings.OPENAI_API_KEY",
@@ -84,7 +63,7 @@ def test_openai_provider_generates_conversation_response():
     ):
         with patch(
             "app.ai.openai_provider.OpenAI",
-            return_value=mock_client,
+            return_value=fake_client,
         ):
             provider = OpenAIProvider()
 
@@ -95,7 +74,7 @@ def test_openai_provider_generates_conversation_response():
         },
         {
             "role": "assistant",
-            "content": "Hello! How can I help?",
+            "content": "Hello!",
         },
         {
             "role": "user",
@@ -105,9 +84,9 @@ def test_openai_provider_generates_conversation_response():
 
     response = provider.generate_conversation_response(messages)
 
-    assert response == "Hello from NEXORA AI"
+    assert response == "Conversation response."
 
-    mock_client.responses.create.assert_called_once_with(
+    fake_client.responses.create.assert_called_once_with(
         model="gpt-5-mini",
         input=[
             {
@@ -116,7 +95,7 @@ def test_openai_provider_generates_conversation_response():
             },
             {
                 "role": "assistant",
-                "content": "Hello! How can I help?",
+                "content": "Hello!",
             },
             {
                 "role": "user",
@@ -126,10 +105,10 @@ def test_openai_provider_generates_conversation_response():
     )
 
 
-def test_openai_provider_generate_conversation_response_handles_request_error():
-    mock_client = MagicMock()
-    mock_client.responses.create.side_effect = RuntimeError(
-        "OpenAI request failed"
+def test_openai_provider_converts_request_error():
+    fake_client = Mock()
+    fake_client.responses.create.side_effect = RuntimeError(
+        "OpenAI connection failed"
     )
 
     with patch(
@@ -138,19 +117,40 @@ def test_openai_provider_generate_conversation_response_handles_request_error():
     ):
         with patch(
             "app.ai.openai_provider.OpenAI",
-            return_value=mock_client,
+            return_value=fake_client,
         ):
             provider = OpenAIProvider()
 
-    try:
-        provider.generate_conversation_response(
-            [
-                {
-                    "role": "user",
-                    "content": "Hello NEXORA",
-                },
-            ]
-        )
-        assert False, "Expected AIProviderRequestError was not raised."
-    except AIProviderRequestError as exc:
-        assert str(exc) == "OpenAI provider request failed."
+    with pytest.raises(AIProviderRequestError) as exc_info:
+        provider.generate_response("Hello NEXORA")
+
+    assert str(exc_info.value) == "OpenAI provider request failed."
+
+
+def test_openai_provider_conversation_converts_request_error():
+    fake_client = Mock()
+    fake_client.responses.create.side_effect = RuntimeError(
+        "OpenAI connection failed"
+    )
+
+    with patch(
+        "app.ai.openai_provider.settings.OPENAI_API_KEY",
+        "test-api-key",
+    ):
+        with patch(
+            "app.ai.openai_provider.OpenAI",
+            return_value=fake_client,
+        ):
+            provider = OpenAIProvider()
+
+    messages = [
+        {
+            "role": "user",
+            "content": "Hello NEXORA",
+        },
+    ]
+
+    with pytest.raises(AIProviderRequestError) as exc_info:
+        provider.generate_conversation_response(messages)
+
+    assert str(exc_info.value) == "OpenAI provider request failed."
