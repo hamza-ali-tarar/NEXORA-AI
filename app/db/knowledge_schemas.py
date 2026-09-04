@@ -8,6 +8,11 @@ class KnowledgeCreate(BaseModel):
     content: str = Field(min_length=1)
 
 
+class KnowledgeUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    content: str | None = Field(default=None, min_length=1)
+
+
 class KnowledgeRead(BaseModel):
     id: int
     user_id: int

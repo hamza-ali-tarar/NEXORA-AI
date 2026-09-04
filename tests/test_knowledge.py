@@ -114,6 +114,76 @@ def test_get_knowledge(client: TestClient):
     assert response.json()["title"] == "My Document"
 
 
+def test_update_knowledge(client: TestClient):
+    token = register_and_login(client, "knowledge5@nexora.ai")
+
+    create = client.post(
+        "/api/v1/knowledge/",
+        headers=auth_headers(token),
+        json={
+            "title": "Original Title",
+            "content": "Original content.",
+        },
+    )
+
+    assert create.status_code == 201
+
+    document_id = create.json()["id"]
+
+    update = client.patch(
+        f"/api/v1/knowledge/{document_id}",
+        headers=auth_headers(token),
+        json={
+            "title": "Updated Title",
+            "content": "Updated content.",
+        },
+    )
+
+    assert update.status_code == 200
+
+    data = update.json()
+
+    assert data["id"] == document_id
+    assert data["title"] == "Updated Title"
+    assert data["content"] == "Updated content."
+
+
+def test_user_cannot_update_other_users_document(client: TestClient):
+    owner_token = register_and_login(
+        client,
+        "knowledge-update-owner@nexora.ai",
+    )
+
+    create = client.post(
+        "/api/v1/knowledge/",
+        headers=auth_headers(owner_token),
+        json={
+            "title": "Private",
+            "content": "Private document.",
+        },
+    )
+
+    assert create.status_code == 201
+
+    document_id = create.json()["id"]
+
+    other_token = register_and_login(
+        client,
+        "knowledge-update-other@nexora.ai",
+    )
+
+    response = client.patch(
+        f"/api/v1/knowledge/{document_id}",
+        headers=auth_headers(other_token),
+        json={
+            "title": "Hacked",
+            "content": "This should not be allowed.",
+        },
+    )
+
+    assert response.status_code == 404
+
+
 def test_delete_knowledge(client: TestClient):
     token = register_and_login(client, "knowledge4@nexora.ai")
 

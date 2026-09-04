@@ -4,7 +4,11 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.db.database import get_db
-from app.db.knowledge_schemas import KnowledgeCreate, KnowledgeRead
+from app.db.knowledge_schemas import (
+    KnowledgeCreate,
+    KnowledgeRead,
+    KnowledgeUpdate,
+)
 from app.db.models import KnowledgeDocument, User
 
 
@@ -75,6 +79,41 @@ def get_knowledge_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Knowledge document not found.",
         )
+
+    return document
+
+
+@router.patch(
+    "/{document_id}",
+    response_model=KnowledgeRead,
+)
+def update_knowledge_document(
+    document_id: int,
+    document_data: KnowledgeUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    document = db.scalar(
+        select(KnowledgeDocument).where(
+            KnowledgeDocument.id == document_id,
+            KnowledgeDocument.user_id == current_user.id,
+        )
+    )
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge document not found.",
+        )
+
+    if document_data.title is not None:
+        document.title = document_data.title
+
+    if document_data.content is not None:
+        document.content = document_data.content
+
+    db.commit()
+    db.refresh(document)
 
     return document
 
