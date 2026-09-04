@@ -1,8 +1,12 @@
-from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select  # type: ignore[reportMissingImports]
 from sqlalchemy.orm import Session  # type: ignore[reportMissingImports]
 
+from app.ai.exceptions import (
+    AIProviderConfigurationError,
+    AIProviderRequestError,
+)
 from app.ai.openai_provider import OpenAIProvider
 from app.ai.retrieval import KnowledgeRetrievalService
 from app.ai.service import AIService
@@ -108,11 +112,26 @@ def chat(
             conversation_messages,
             knowledge_context=knowledge_context or None,
         )
-    except Exception as exc:
+
+    except AIProviderConfigurationError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI provider is not configured.",
+        ) from exc
+
+    except AIProviderRequestError as exc:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="AI provider request failed.",
+        ) from exc
+
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error.",
         ) from exc
 
     assistant_message = Message(
