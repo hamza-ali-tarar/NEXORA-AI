@@ -13,6 +13,8 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite:///./nexora.db"
 
+    SECRET_KEY: str = "dev-secret-key-change-in-production"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
