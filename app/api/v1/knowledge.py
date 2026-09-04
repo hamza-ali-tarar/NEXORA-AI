@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_, select  # pyright: ignore[reportMissingImports]
+from sqlalchemy.orm import Session  # pyright: ignore[reportMissingImports]
 
 from app.auth.dependencies import get_current_user
 from app.db.database import get_db
@@ -46,16 +46,32 @@ def create_knowledge(
     response_model=list[KnowledgeRead],
 )
 def get_knowledge(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=10, ge=1, le=100),
+    search: str | None = Query(default=None, min_length=1),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    documents = db.scalars(
-        select(KnowledgeDocument)
-        .where(KnowledgeDocument.user_id == current_user.id)
-        .order_by(KnowledgeDocument.id)
-    ).all()
+    query = select(KnowledgeDocument).where(
+        KnowledgeDocument.user_id == current_user.id,
+    )
 
-    return documents
+    if search is not None:
+        search_term = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                KnowledgeDocument.title.ilike(search_term),
+                KnowledgeDocument.content.ilike(search_term),
+            )
+        )
+
+    query = (
+        query.order_by(KnowledgeDocument.id)
+        .offset(skip)
+        .limit(limit)
+    )
+
+    return db.scalars(query).all()
 
 
 @router.get(

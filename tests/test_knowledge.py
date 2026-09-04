@@ -251,3 +251,93 @@ def test_user_cannot_access_other_users_document(client: TestClient):
     )
 
     assert response.status_code == 404
+
+
+def test_search_knowledge(client: TestClient):
+    token = register_and_login(client, "knowledge-search@nexora.ai")
+
+    client.post(
+        "/api/v1/knowledge/",
+        headers=auth_headers(token),
+        json={
+            "title": "Python Guide",
+            "content": "Learn Python programming.",
+        },
+    )
+
+    client.post(
+        "/api/v1/knowledge/",
+        headers=auth_headers(token),
+        json={
+            "title": "FastAPI Guide",
+            "content": "Build APIs with FastAPI.",
+        },
+    )
+
+    response = client.get(
+        "/api/v1/knowledge/?search=python",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert len(data) == 1
+    assert data[0]["title"] == "Python Guide"
+
+
+def test_knowledge_pagination_limit(client: TestClient):
+    token = register_and_login(client, "knowledge-limit@nexora.ai")
+
+    for index in range(3):
+        response = client.post(
+            "/api/v1/knowledge/",
+            headers=auth_headers(token),
+            json={
+                "title": f"Document {index + 1}",
+                "content": f"Content {index + 1}",
+            },
+        )
+        assert response.status_code == 201
+
+    response = client.get(
+        "/api/v1/knowledge/?limit=2",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert len(data) == 2
+    assert data[0]["title"] == "Document 1"
+    assert data[1]["title"] == "Document 2"
+
+
+def test_knowledge_pagination_skip(client: TestClient):
+    token = register_and_login(client, "knowledge-skip@nexora.ai")
+
+    for index in range(3):
+        response = client.post(
+            "/api/v1/knowledge/",
+            headers=auth_headers(token),
+            json={
+                "title": f"Document {index + 1}",
+                "content": f"Content {index + 1}",
+            },
+        )
+        assert response.status_code == 201
+
+    response = client.get(
+        "/api/v1/knowledge/?skip=1&limit=2",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert len(data) == 2
+    assert data[0]["title"] == "Document 2"
+    assert data[1]["title"] == "Document 3"
