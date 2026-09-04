@@ -1,5 +1,4 @@
-from fastapi import HTTPException, status
-
+from app.ai.exceptions import AIProviderConfigurationError
 from app.ai.mock_provider import MockAIProvider
 from app.ai.openai_provider import OpenAIProvider
 from app.ai.provider import AIProvider
@@ -17,7 +16,6 @@ def get_ai_provider() -> AIProvider:
     if provider_name == "mock":
         return MockAIProvider()
 
-    raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail=f"Unsupported AI provider: {settings.AI_PROVIDER}",
+    raise AIProviderConfigurationError(
+        f"Unsupported AI provider: {settings.AI_PROVIDER}"
     )
