@@ -1,121 +1,80 @@
 from fastapi.testclient import TestClient
 
 
-def test_create_user(client: TestClient):
-    response = client.post(
-        "/api/v1/users/",
+def register_and_login(
+    client: TestClient,
+    email: str,
+    password: str = "password123",
+    full_name: str = "Test User",
+):
+    register_response = client.post(
+        "/api/v1/auth/register",
         json={
-            "email": "users-create@nexora.ai",
-            "full_name": "Users Create User",
+            "email": email,
+            "password": password,
+            "full_name": full_name,
         },
     )
 
-    assert response.status_code == 201
+    assert register_response.status_code == 201
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": email,
+            "password": password,
+        },
+    )
+
+    assert login_response.status_code == 200
+
+    return login_response.json()["access_token"]
+
+
+def auth_headers(token: str):
+    return {
+        "Authorization": f"Bearer {token}",
+    }
+
+
+def test_users_require_authentication(client: TestClient):
+    response = client.get("/api/v1/users/me")
+
+    assert response.status_code == 401
+
+
+def test_get_my_user(client: TestClient):
+    token = register_and_login(
+        client,
+        "users-me@nexora.ai",
+        full_name="My User",
+    )
+
+    response = client.get(
+        "/api/v1/users/me",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
 
     data = response.json()
 
-    assert data["email"] == "users-create@nexora.ai"
-    assert data["full_name"] == "Users Create User"
+    assert data["email"] == "users-me@nexora.ai"
+    assert data["full_name"] == "My User"
     assert "id" in data
     assert "created_at" in data
 
 
-def test_duplicate_create_user(client: TestClient):
-    payload = {
-        "email": "users-duplicate@nexora.ai",
-        "full_name": "First User",
-    }
-
-    first_response = client.post(
-        "/api/v1/users/",
-        json=payload,
+def test_update_my_user(client: TestClient):
+    token = register_and_login(
+        client,
+        "users-update@nexora.ai",
+        full_name="Before Update",
     )
-
-    second_response = client.post(
-        "/api/v1/users/",
-        json=payload,
-    )
-
-    assert first_response.status_code == 201
-    assert second_response.status_code == 409
-
-
-def test_list_users(client: TestClient):
-    client.post(
-        "/api/v1/users/",
-        json={
-            "email": "users-list-one@nexora.ai",
-            "full_name": "List User One",
-        },
-    )
-
-    client.post(
-        "/api/v1/users/",
-        json={
-            "email": "users-list-two@nexora.ai",
-            "full_name": "List User Two",
-        },
-    )
-
-    response = client.get("/api/v1/users/")
-
-    assert response.status_code == 200
-
-    data = response.json()
-
-    assert len(data) == 2
-    assert data[0]["email"] == "users-list-one@nexora.ai"
-    assert data[1]["email"] == "users-list-two@nexora.ai"
-
-
-def test_get_user(client: TestClient):
-    create_response = client.post(
-        "/api/v1/users/",
-        json={
-            "email": "users-get@nexora.ai",
-            "full_name": "Get User",
-        },
-    )
-
-    assert create_response.status_code == 201
-
-    user_id = create_response.json()["id"]
-
-    response = client.get(
-        f"/api/v1/users/{user_id}",
-    )
-
-    assert response.status_code == 200
-
-    data = response.json()
-
-    assert data["id"] == user_id
-    assert data["email"] == "users-get@nexora.ai"
-    assert data["full_name"] == "Get User"
-
-
-def test_get_nonexistent_user(client: TestClient):
-    response = client.get("/api/v1/users/999999")
-
-    assert response.status_code == 404
-    assert response.json()["detail"] == "User not found."
-
-
-def test_update_user(client: TestClient):
-    create_response = client.post(
-        "/api/v1/users/",
-        json={
-            "email": "users-update@nexora.ai",
-            "full_name": "Before Update",
-        },
-    )
-
-    assert create_response.status_code == 201
-
-    user_id = create_response.json()["id"]
 
     response = client.patch(
-        f"/api/v1/users/{user_id}",
+        "/api/v1/users/me",
+        headers=auth_headers(token),
         json={
             "email": "users-updated@nexora.ai",
             "full_name": "After Update",
@@ -126,35 +85,26 @@ def test_update_user(client: TestClient):
 
     data = response.json()
 
-    assert data["id"] == user_id
     assert data["email"] == "users-updated@nexora.ai"
     assert data["full_name"] == "After Update"
 
 
-def test_update_user_duplicate_email(client: TestClient):
-    first_response = client.post(
-        "/api/v1/users/",
-        json={
-            "email": "users-update-first@nexora.ai",
-            "full_name": "First User",
-        },
+def test_update_my_user_duplicate_email(client: TestClient):
+    register_and_login(
+        client,
+        "users-update-first@nexora.ai",
+        full_name="First User",
     )
 
-    second_response = client.post(
-        "/api/v1/users/",
-        json={
-            "email": "users-update-second@nexora.ai",
-            "full_name": "Second User",
-        },
+    second_token = register_and_login(
+        client,
+        "users-update-second@nexora.ai",
+        full_name="Second User",
     )
-
-    assert first_response.status_code == 201
-    assert second_response.status_code == 201
-
-    second_user_id = second_response.json()["id"]
 
     response = client.patch(
-        f"/api/v1/users/{second_user_id}",
+        "/api/v1/users/me",
+        headers=auth_headers(second_token),
         json={
             "email": "users-update-first@nexora.ai",
         },
@@ -166,38 +116,23 @@ def test_update_user_duplicate_email(client: TestClient):
     )
 
 
-def test_update_nonexistent_user(client: TestClient):
-    response = client.patch(
-        "/api/v1/users/999999",
-        json={
-            "full_name": "Updated User",
-        },
+def test_delete_my_user(client: TestClient):
+    token = register_and_login(
+        client,
+        "users-delete@nexora.ai",
+        full_name="Delete User",
     )
-
-    assert response.status_code == 404
-    assert response.json()["detail"] == "User not found."
-
-
-def test_delete_user(client: TestClient):
-    create_response = client.post(
-        "/api/v1/users/",
-        json={
-            "email": "users-delete@nexora.ai",
-            "full_name": "Delete User",
-        },
-    )
-
-    assert create_response.status_code == 201
-
-    user_id = create_response.json()["id"]
 
     delete_response = client.delete(
-        f"/api/v1/users/{user_id}",
+        "/api/v1/users/me",
+        headers=auth_headers(token),
     )
 
     assert delete_response.status_code == 204
 
-    get_response = client.get(f"/api/v1/users/{user_id}")
+    me_response = client.get(
+        "/api/v1/users/me",
+        headers=auth_headers(token),
+    )
 
-    assert get_response.status_code == 404
-    assert get_response.json()["detail"] == "User not found."
+    assert me_response.status_code == 401
