@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.ai.exceptions import AIProviderConfigurationError
 from app.api.v1.ai import router as ai_router
 from app.api.v1.auth import router as auth_me_router
 from app.api.v1.conversations import router as conversations_router
@@ -16,6 +17,21 @@ app = FastAPI(
     description=settings.APP_DESCRIPTION,
     version=settings.APP_VERSION,
 )
+
+
+@app.exception_handler(AIProviderConfigurationError)
+async def ai_provider_configuration_exception_handler(
+    request: Request,
+    exc: AIProviderConfigurationError,
+) -> JSONResponse:
+    """Return a safe response when the AI provider is misconfigured."""
+
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "AI provider is not configured.",
+        },
+    )
 
 
 @app.exception_handler(Exception)
